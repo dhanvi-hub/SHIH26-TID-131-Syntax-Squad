@@ -8,7 +8,8 @@ import {
   Map, 
   FileText, 
   Scale,
-  Shield
+  Shield,
+  Search,
 } from 'lucide-react'
 
 const navItems = [
@@ -21,6 +22,11 @@ const navItems = [
     name: 'India Map',
     href: '/map',
     icon: Map,
+  },
+  {
+    name: 'Investigate',
+    href: '/investigate',
+    icon: Search,
   },
   {
     name: 'Reports',
