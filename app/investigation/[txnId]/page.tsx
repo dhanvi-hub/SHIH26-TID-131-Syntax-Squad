@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Navigation } from '@/components/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -109,9 +110,11 @@ export default function InvestigationPage({ params }: InvestigationPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4">
+      <Navigation />
+      
+      {/* Sub Header */}
+      <div className="border-b border-border bg-card/30">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" asChild>
               <Link href="/">
@@ -129,7 +132,7 @@ export default function InvestigationPage({ params }: InvestigationPageProps) {
             </Badge>
           </div>
         </div>
-      </header>
+      </div>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Risk Score Card */}
@@ -181,7 +184,7 @@ export default function InvestigationPage({ params }: InvestigationPageProps) {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Amount</p>
-                    <p className="font-medium">${transaction.amount.toLocaleString()}</p>
+                    <p className="font-medium">{'\u20B9'}{transaction.amount.toLocaleString('en-IN')}</p>
                   </div>
                 </div>
                 
@@ -290,7 +293,7 @@ export default function InvestigationPage({ params }: InvestigationPageProps) {
                 </div>
                 <p className="text-sm text-muted-foreground mb-2">Behavioral analysis:</p>
                 <ul className="text-sm space-y-1">
-                  <li>Avg Amount: ${transaction.agentResults.research.averageAmount.toFixed(2)}</li>
+                  <li>Avg Amount: {'\u20B9'}{transaction.agentResults.research.averageAmount.toLocaleString('en-IN')}</li>
                   <li>Known Locations: {transaction.agentResults.research.commonLocations.join(', ') || 'N/A'}</li>
                   <li>Additional Risk: +{transaction.agentResults.research.additionalRiskScore}</li>
                 </ul>
@@ -363,7 +366,7 @@ export default function InvestigationPage({ params }: InvestigationPageProps) {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-muted-foreground">{txn.location}</span>
-                      <span className="font-medium">${txn.amount.toLocaleString()}</span>
+                      <span className="font-medium">{'\u20B9'}{txn.amount.toLocaleString('en-IN')}</span>
                       <span className={`font-bold ${getRiskColor(txn.riskScore)}`}>
                         {txn.riskScore}
                       </span>

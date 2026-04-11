@@ -35,7 +35,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
     },
     {
       title: 'Total Volume',
-      value: `$${stats.totalAmount.toLocaleString()}`,
+      value: `\u20B9${stats.totalAmount.toLocaleString('en-IN')}`,
       icon: DollarSign,
       color: 'text-chart-1',
     },

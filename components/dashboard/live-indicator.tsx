@@ -56,7 +56,7 @@ export function LiveIndicator({ transaction, isActive }: LiveIndicatorProps) {
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="font-medium">{transaction.user_id}</span>
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="font-mono">${transaction.amount.toLocaleString()}</span>
+            <span className="font-mono">{'\u20B9'}{transaction.amount.toLocaleString('en-IN')}</span>
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-muted-foreground">{transaction.location}</span>
             <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />

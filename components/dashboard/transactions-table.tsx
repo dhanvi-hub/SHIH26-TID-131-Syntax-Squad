@@ -87,7 +87,7 @@ export function TransactionsTable({ transactions, latestTxnId }: TransactionsTab
                     <TableCell className="font-mono text-sm">{txn.txn_id}</TableCell>
                     <TableCell className="font-medium">{txn.user_id}</TableCell>
                     <TableCell className="text-right font-mono">
-                      ${txn.amount.toLocaleString()}
+                      {'\u20B9'}{txn.amount.toLocaleString('en-IN')}
                     </TableCell>
                     <TableCell>{txn.location}</TableCell>
                     <TableCell className="text-center">

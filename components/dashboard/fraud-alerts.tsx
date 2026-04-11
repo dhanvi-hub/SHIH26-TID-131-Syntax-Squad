@@ -41,7 +41,7 @@ export function FraudAlerts({ alerts, onDismiss }: FraudAlertsProps) {
                   <span className="font-mono text-sm truncate">{alert.txn_id}</span>
                   <span className="text-sm text-muted-foreground">|</span>
                   <span className="font-bold text-fraud">
-                    ${alert.amount.toLocaleString()}
+                    {'\u20B9'}{alert.amount.toLocaleString('en-IN')}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate mt-1">

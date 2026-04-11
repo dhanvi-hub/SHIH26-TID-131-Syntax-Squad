@@ -31,7 +31,7 @@ export function reportingAgent(
 
   // Add transaction context
   parts.push(
-    `Transaction of $${transaction.amount.toLocaleString()} from ${transaction.location} via ${transaction.device}.`
+    `Transaction of \u20B9${transaction.amount.toLocaleString('en-IN')} from ${transaction.location} via ${transaction.device}.`
   )
 
   // Explain rule flags
@@ -52,7 +52,7 @@ export function reportingAgent(
     const ratio = (transaction.amount / researchResult.averageAmount).toFixed(1)
     if (parseFloat(ratio) > 2) {
       parts.push(
-        `This amount is ${ratio}x the user's average transaction of $${researchResult.averageAmount.toFixed(2)}.`
+        `This amount is ${ratio}x the user's average transaction of \u20B9${researchResult.averageAmount.toLocaleString('en-IN')}.`
       )
     }
   }
