@@ -1,5 +1,5 @@
 import type { ProcessedTransaction, DashboardStats, StateTransactionData, FraudCriteria } from '@/lib/types'
-import { INDIAN_CITIES } from '@/lib/agents/transaction-generator'
+import { WORLD_CITIES } from '@/lib/agents/transaction-generator'
 
 // In-memory store (simulates MongoDB)
 class TransactionStore {
@@ -123,11 +123,11 @@ class TransactionStore {
   getStateWiseData(): StateTransactionData[] {
     const stateData: Record<string, StateTransactionData> = {}
 
-    // Initialize all Indian states
-    const states = [...new Set(INDIAN_CITIES.map(c => c.state))]
-    states.forEach(state => {
-      stateData[state] = {
-        state,
+    // Initialize all global regions & states
+    const regions = [...new Set(WORLD_CITIES.map(c => c.region))]
+    regions.forEach(region => {
+      stateData[region] = {
+        state: region,
         safeCount: 0,
         suspiciousCount: 0,
         fraudCount: 0,
@@ -147,7 +147,7 @@ class TransactionStore {
       }
     })
 
-    // Calculate dominant status for each state
+    // Calculate dominant status for each region
     Object.values(stateData).forEach(state => {
       if (state.fraudCount > 0) {
         state.dominantStatus = 'FRAUD'
@@ -164,8 +164,8 @@ class TransactionStore {
   }
 
   private extractState(location: string): string | null {
-    const cityData = INDIAN_CITIES.find(c => location.includes(c.city))
-    return cityData?.state || null
+    const cityData = WORLD_CITIES.find(c => location.includes(c.city) || location.includes(c.region) || location.includes(c.country))
+    return cityData?.region || null
   }
 
   getFraudTransactions(): ProcessedTransaction[] {

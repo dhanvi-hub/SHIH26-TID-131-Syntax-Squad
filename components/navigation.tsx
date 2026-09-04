@@ -19,7 +19,7 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    name: 'India Map',
+    name: 'Live Threats',
     href: '/map',
     icon: Map,
   },

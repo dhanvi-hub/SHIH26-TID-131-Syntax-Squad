@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { transactionStore } from '@/lib/store'
 import { generateTransaction } from '@/lib/agents/transaction-generator'
 import { processTransaction } from '@/lib/agents/pipeline'
-import type { Transaction } from '@/lib/types'
+import type { Transaction, DeviceTelemetry } from '@/lib/types'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -19,17 +19,15 @@ export async function POST(request: Request) {
     const body = await request.json()
     
     let transaction: Transaction
+    let telemetry: DeviceTelemetry | undefined = body.telemetry
     
     if (body.generate) {
-      // Generate a random transaction
       transaction = generateTransaction(body.forceAnomaly)
     } else {
-      // Use provided transaction data
       transaction = body.transaction as Transaction
     }
 
-    // Process through the agent pipeline
-    const result = await processTransaction(transaction)
+    const result = await processTransaction(transaction, telemetry)
     
     return NextResponse.json({
       success: true,

@@ -1,4 +1,4 @@
-import type { Transaction, DetectiveResult, ResearchResult, RiskResult } from '@/lib/types'
+import type { Transaction, DetectiveResult, ResearchResult, RiskResult, TelecomResult } from '@/lib/types'
 
 const FLAG_DESCRIPTIONS: Record<string, string> = {
   VERY_HIGH_AMOUNT: 'transaction amount is significantly higher than normal limits',
@@ -10,13 +10,20 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   LOCATION_CHANGE: 'transaction location differs from usual patterns',
   NEW_DEVICE: 'transaction made from an unrecognized device',
   IP_CHANGE: 'IP address changed from previous transaction',
+  ACTIVE_VOICE_CALL_DURING_TX: 'active voice call connected during payment initiation (Vishing alert)',
+  SMS_KYC_PHISHING_ATTEMPT: 'suspicious SMS received threatening KYC/Account suspension',
+  SMS_ELECTRICITY_SCAM: 'suspicious SMS threatening immediate electricity disconnection',
+  SMS_LOTTERY_JOB_SCAM: 'suspicious SMS luring with fake reward or job offer',
+  SMS_SUSPICIOUS_URL_DETECTED: 'unverified URL or APK link detected in recent SMS',
+  VISHING_PLUS_SMS_CORRELATION: 'high-risk correlation between live call and scam SMS',
 }
 
 export function reportingAgent(
   transaction: Transaction,
   detectiveResult: DetectiveResult,
   researchResult: ResearchResult,
-  riskResult: RiskResult
+  riskResult: RiskResult,
+  telecomResult?: TelecomResult
 ): string {
   const parts: string[] = []
 
@@ -40,6 +47,11 @@ export function reportingAgent(
       .map((flag) => FLAG_DESCRIPTIONS[flag] || flag.toLowerCase().replace(/_/g, ' '))
       .join('; ')
     parts.push(`Flagged because: ${flagExplanations}.`)
+  }
+
+  // Telecom & Mobile Telemetry evidence
+  if (telecomResult && telecomResult.evidenceSummary.length > 0) {
+    parts.push(`Telecom Threat Intel: ${telecomResult.evidenceSummary.join('. ')}.`)
   }
 
   // Add research findings

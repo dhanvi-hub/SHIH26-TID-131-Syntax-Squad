@@ -1,7 +1,8 @@
-import type { Transaction, ProcessedTransaction, AgentStep } from '@/lib/types'
+import type { Transaction, ProcessedTransaction, AgentStep, DeviceTelemetry } from '@/lib/types'
 import { detectiveAgent } from './detective-agent'
 import { researchAgent } from './research-agent'
-import { riskEngine } from './risk-engine'
+import { telecomAgent } from './telecom-agent'
+import { enhancedRiskEngine } from './risk-engine'
 import { reportingAgent } from './reporting-agent'
 import { transactionStore } from '@/lib/store'
 
@@ -12,11 +13,13 @@ export interface PipelineResult {
 
 export async function processTransaction(
   transaction: Transaction,
+  telemetry?: DeviceTelemetry,
   onStepComplete?: (step: AgentStep) => void
 ): Promise<PipelineResult> {
   const steps: AgentStep[] = [
     { name: 'Detective Agent', status: 'pending' },
     { name: 'Research Agent', status: 'pending' },
+    { name: 'Telecom & NLP Agent', status: 'pending' },
     { name: 'Risk Engine', status: 'pending' },
     { name: 'Reporting Agent', status: 'pending' },
   ]
@@ -28,7 +31,7 @@ export async function processTransaction(
   steps[0].status = 'processing'
   onStepComplete?.(steps[0])
   
-  await simulateDelay(100) // Simulate processing time
+  await simulateDelay(100)
   const detectiveResult = detectiveAgent(transaction, allTransactions)
   steps[0].status = 'complete'
   steps[0].result = detectiveResult
@@ -44,30 +47,44 @@ export async function processTransaction(
   steps[1].result = researchResult
   onStepComplete?.(steps[1])
 
-  // Step 3: Risk Engine
+  // Step 3: Telecom & Social Engineering NLP Agent
   steps[2].status = 'processing'
   onStepComplete?.(steps[2])
-  
-  await simulateDelay(80)
-  const riskResult = riskEngine(detectiveResult, researchResult)
+
+  await simulateDelay(100)
+  const telecomResult = telecomAgent(telemetry)
   steps[2].status = 'complete'
-  steps[2].result = riskResult
+  steps[2].result = telecomResult as any
   onStepComplete?.(steps[2])
 
-  // Step 4: Reporting Agent
+  // Step 4: Enhanced Risk Engine with ML Ensemble
   steps[3].status = 'processing'
   onStepComplete?.(steps[3])
   
-  await simulateDelay(100)
-  const report = reportingAgent(transaction, detectiveResult, researchResult, riskResult)
+  await simulateDelay(80)
+  const riskResult = enhancedRiskEngine(transaction, detectiveResult, researchResult, telecomResult, allTransactions)
   steps[3].status = 'complete'
-  steps[3].result = report
+  steps[3].result = riskResult
   onStepComplete?.(steps[3])
+
+  // Step 5: Reporting Agent
+  steps[4].status = 'processing'
+  onStepComplete?.(steps[4])
+  
+  await simulateDelay(100)
+  const report = reportingAgent(transaction, detectiveResult, researchResult, riskResult, telecomResult)
+  steps[4].status = 'complete'
+  steps[4].result = report
+  onStepComplete?.(steps[4])
+
+  // Combine rule flags
+  const combinedFlags = Array.from(new Set([...detectiveResult.ruleFlags, ...(telecomResult.ruleFlags || [])]))
 
   // Create processed transaction
   const processedTransaction: ProcessedTransaction = {
     ...transaction,
-    ruleFlags: detectiveResult.ruleFlags,
+    telemetry,
+    ruleFlags: combinedFlags,
     riskScore: riskResult.riskScore,
     status: riskResult.status,
     report,
@@ -75,6 +92,7 @@ export async function processTransaction(
     agentResults: {
       detective: detectiveResult,
       research: researchResult,
+      telecom: telecomResult,
       risk: riskResult,
     },
   }

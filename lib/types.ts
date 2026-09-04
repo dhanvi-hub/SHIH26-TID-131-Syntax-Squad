@@ -8,6 +8,20 @@ export interface Transaction {
   timestamp: string
 }
 
+export interface DeviceTelemetry {
+  recentSms?: string
+  smsSender?: string
+  isOnActiveCall?: boolean
+  callDurationSec?: number
+}
+
+export interface TelecomResult {
+  ruleFlags: string[]
+  riskScore: number
+  scamCategory: 'KYC_EXPIRY' | 'ELECTRICITY_BILL' | 'LOTTERY_JOB' | 'SCREEN_SHARE_CALL' | 'PHISHING_URL' | 'NONE'
+  evidenceSummary: string[]
+}
+
 export interface DetectiveResult {
   ruleFlags: string[]
   riskScore: number
@@ -27,6 +41,7 @@ export interface RiskResult {
 }
 
 export interface ProcessedTransaction extends Transaction {
+  telemetry?: DeviceTelemetry
   ruleFlags: string[]
   riskScore: number
   status: 'SAFE' | 'SUSPICIOUS' | 'FRAUD'
@@ -35,6 +50,7 @@ export interface ProcessedTransaction extends Transaction {
   agentResults: {
     detective: DetectiveResult
     research: ResearchResult
+    telecom?: TelecomResult
     risk: RiskResult
   }
   fraudCriteria?: FraudCriteria

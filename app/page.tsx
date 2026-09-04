@@ -1,6 +1,6 @@
 'use client'
 
-import { useTransactions } from '@/hooks/use-transactions'
+import { useStreaming } from '@/contexts/streaming-context'
 import { Navigation } from '@/components/navigation'
 import { StatsCards } from '@/components/dashboard/stats-cards'
 import { TransactionsTable } from '@/components/dashboard/transactions-table'
@@ -24,7 +24,7 @@ export default function DashboardPage() {
     seedTransactions,
     clearTransactions,
     dismissFraudAlert,
-  } = useTransactions()
+  } = useStreaming()
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,23 +39,23 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             {!isStreaming ? (
-              <Button onClick={startStreaming} className="gap-2">
+              <Button onClick={startStreaming} className="gap-2 font-mono text-xs">
                 <Play className="h-4 w-4" />
                 Start Simulation
               </Button>
             ) : (
-              <Button onClick={stopStreaming} variant="destructive" className="gap-2">
+              <Button onClick={stopStreaming} variant="destructive" className="gap-2 font-mono text-xs">
                 <Square className="h-4 w-4" />
                 Stop Simulation
               </Button>
             )}
             
-            <Button onClick={() => seedTransactions(20)} variant="outline" className="gap-2">
+            <Button onClick={() => seedTransactions(20)} variant="outline" className="gap-2 font-mono text-xs">
               <RefreshCw className="h-4 w-4" />
               Seed Data
             </Button>
             
-            <Button onClick={clearTransactions} variant="outline" className="gap-2">
+            <Button onClick={clearTransactions} variant="outline" className="gap-2 font-mono text-xs">
               <Trash2 className="h-4 w-4" />
               Clear
             </Button>
@@ -73,7 +73,7 @@ export default function DashboardPage() {
         
         {/* Agent Pipeline Visualization */}
         <AgentPipeline steps={latestSteps} isActive={isStreaming} />
-        
+
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-1">
           {/* Transactions Table */}
@@ -83,8 +83,8 @@ export default function DashboardPage() {
           />
         </div>
         
-        {/* Charts */}
-        <DashboardCharts isActive={isStreaming} />
+        {/* Dynamic Real-Time Charts */}
+        <DashboardCharts transactions={transactions} isActive={isStreaming} />
       </main>
     </div>
   )

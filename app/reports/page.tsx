@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { useStreaming } from '@/contexts/streaming-context'
 import { Navigation } from '@/components/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +19,7 @@ import {
   Wifi,
   TrendingUp
 } from 'lucide-react'
+import { jsPDF } from 'jspdf'
 import type { ProcessedTransaction, FraudCriteria } from '@/lib/types'
 
 const criteriaIcons = {
@@ -171,30 +173,16 @@ function ReportCard({ transaction, onDownload }: {
 }
 
 export default function ReportsPage() {
-  const [transactions, setTransactions] = useState<ProcessedTransaction[]>([])
+  const { transactions, refresh, isStreaming } = useStreaming()
   const [filter, setFilter] = useState<'all' | 'FRAUD' | 'SUSPICIOUS'>('all')
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
 
-  const fetchTransactions = useCallback(async () => {
-    try {
-      const res = await fetch('/api/reports')
-      if (res.ok) {
-        const data = await res.json()
-        setTransactions(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch transactions:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
+  // Refresh on mount
   useEffect(() => {
-    fetchTransactions()
-    const interval = setInterval(fetchTransactions, 10000)
-    return () => clearInterval(interval)
-  }, [fetchTransactions])
+    setIsLoading(true)
+    refresh().finally(() => setIsLoading(false))
+  }, [refresh])
 
   const filteredTransactions = transactions.filter(txn => {
     if (filter === 'all') return txn.status !== 'SAFE'
@@ -262,32 +250,526 @@ Fraud Detection System - AI-Powered Transaction Monitoring
   }
 
   const downloadPDF = (txn: ProcessedTransaction) => {
-    const content = generatePDFContent(txn)
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `fraud-report-${txn.txn_id}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    const doc = new jsPDF()
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 15
+    const contentWidth = pageWidth - (margin * 2)
+    
+    // Background
+    doc.setFillColor(243, 244, 246) // Light gray background
+    doc.rect(0, 0, pageWidth, pageHeight, 'F')
+    
+    // White card
+    doc.setFillColor(255, 255, 255)
+    doc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
+    
+    let y = 30
+    
+    // === HEADER SECTION ===
+    // Warning triangle icon (yellow)
+    doc.setFillColor(251, 191, 36) // Yellow
+    doc.triangle(25, y - 8, 35, y - 8, 30, y - 16, 'F')
+    doc.setFillColor(0, 0, 0)
+    doc.setFontSize(8)
+    doc.text('!', 29, y - 10)
+    
+    // Title
+    doc.setTextColor(31, 41, 55) // Dark gray
+    doc.setFontSize(22)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Fraud Detection Report', 42, y - 8)
+    
+    // Status badge (top right)
+    const badgeText = txn.status === 'FRAUD' ? 'SIZEABLE FRAUD ALERT!' : 
+                      txn.status === 'SUSPICIOUS' ? 'SUSPICIOUS ACTIVITY' : 'SAFE TRANSACTION'
+    const badgeColor = txn.status === 'FRAUD' ? [220, 38, 38] : 
+                       txn.status === 'SUSPICIOUS' ? [245, 158, 11] : [34, 197, 94]
+    
+    doc.setFontSize(8)
+    doc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
+    doc.setFont('helvetica', 'bold')
+    doc.text(badgeText, pageWidth - margin - 5, y - 12, { align: 'right' })
+    
+    // Date/time
+    doc.setFontSize(9)
+    doc.setTextColor(107, 114, 128) // Gray
+    doc.setFont('helvetica', 'normal')
+    const dateStr = new Date(txn.timestamp).toLocaleDateString('en-IN', { 
+      year: 'numeric', month: 'long', day: 'numeric' 
+    })
+    const timeStr = new Date(txn.timestamp).toLocaleTimeString('en-IN', { 
+      hour: '2-digit', minute: '2-digit', hour12: true 
+    })
+    doc.text(`${dateStr} | ${timeStr}`, pageWidth - margin - 5, y - 4, { align: 'right' })
+    
+    y += 15
+    
+    // Separator line
+    doc.setDrawColor(229, 231, 235)
+    doc.setLineWidth(0.5)
+    doc.line(margin + 10, y, pageWidth - margin - 10, y)
+    
+    y += 15
+    
+    // === TRANSACTION DETAILS SECTION ===
+    doc.setTextColor(31, 41, 55)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Transaction Details', margin + 10, y)
+    y += 10
+    
+    // Table
+    const tableData = [
+      ['Transaction ID', txn.txn_id],
+      ['User ID', txn.user_id],
+      ['Amount', `Rs. ${txn.amount.toLocaleString('en-IN')}`],
+      ['Location', txn.location],
+      ['IP Address', txn.ip],
+      ['Device', txn.device],
+    ]
+    
+    const colWidth = contentWidth - 20
+    const labelWidth = 50
+    
+    tableData.forEach(([label, value], index) => {
+      // Alternating row background
+      if (index % 2 === 0) {
+        doc.setFillColor(249, 250, 251)
+        doc.rect(margin + 10, y - 5, colWidth, 10, 'F')
+      }
+      
+      // Border
+      doc.setDrawColor(229, 231, 235)
+      doc.rect(margin + 10, y - 5, colWidth, 10, 'S')
+      doc.line(margin + 10 + labelWidth, y - 5, margin + 10 + labelWidth, y + 5)
+      
+      doc.setFontSize(10)
+      doc.setTextColor(107, 114, 128)
+      doc.setFont('helvetica', 'normal')
+      doc.text(label, margin + 15, y + 1)
+      
+      doc.setTextColor(31, 41, 55)
+      doc.setFont('helvetica', 'bold')
+      doc.text(value, margin + 15 + labelWidth, y + 1)
+      
+      y += 10
+    })
+    
+    y += 15
+    
+    // === REASONS FOR FLAGGING SECTION ===
+    doc.setTextColor(31, 41, 55)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Reasons for Flagging', margin + 10, y)
+    y += 12
+    
+    // Use ruleFlags from the transaction to determine reasons
+    const flags = txn.ruleFlags || []
+    const reasons: Array<{icon: string, title: string, description: string, color: number[]}> = []
+    
+    // Check for high amount flags
+    if (flags.includes('VERY_HIGH_AMOUNT') || flags.includes('HIGH_AMOUNT')) {
+      reasons.push({
+        icon: '!',
+        title: 'High Transaction Amount',
+        description: `Rs.${txn.amount.toLocaleString('en-IN')} is significantly higher than user's usual spending`,
+        color: [220, 38, 38]
+      })
+    }
+    
+    // Check for location-related flags
+    if (flags.includes('SUSPICIOUS_LOCATION') || flags.includes('RAPID_LOCATION_CHANGE') || flags.includes('LOCATION_CHANGE')) {
+      const locDesc = flags.includes('RAPID_LOCATION_CHANGE') 
+        ? `Impossible travel detected - Transaction from ${txn.location} occurred too quickly after previous location`
+        : `Transaction from ${txn.location} is an unusual location for this user`
+      reasons.push({
+        icon: '!',
+        title: 'Unusual Location',
+        description: locDesc,
+        color: [245, 158, 11]
+      })
+    }
+    
+    // Check for device-related flags
+    if (flags.includes('NEW_DEVICE') || flags.includes('DEVICE_CHANGE')) {
+      reasons.push({
+        icon: '!',
+        title: 'New Device',
+        description: `Transaction initiated from an unrecognized ${txn.device} device`,
+        color: [34, 197, 94]
+      })
+    }
+    
+    // Check for rapid/velocity flags
+    if (flags.includes('RAPID_TRANSACTIONS') || flags.includes('VELOCITY_ANOMALY') || flags.includes('MULTIPLE_RECENT_TRANSACTIONS')) {
+      reasons.push({
+        icon: '!',
+        title: 'Rapid Transactions',
+        description: 'Multiple transactions detected in a short time period - possible automated fraud',
+        color: [245, 158, 11]
+      })
+    }
+    
+    // Check for suspicious IP flags
+    if (flags.includes('SUSPICIOUS_IP') || flags.includes('IP_CHANGE')) {
+      const ipDesc = flags.includes('SUSPICIOUS_IP')
+        ? `IP address ${txn.ip} flagged as potentially suspicious (VPN/Proxy detected)`
+        : `IP address changed from previous transaction to ${txn.ip}`
+      reasons.push({
+        icon: '!',
+        title: 'Suspicious IP/Network',
+        description: ipDesc,
+        color: [220, 38, 38]
+      })
+    }
+    
+    // Check for late night flag
+    if (flags.includes('LATE_NIGHT')) {
+      const hour = new Date(txn.timestamp).getHours()
+      reasons.push({
+        icon: '!',
+        title: 'Late Night Transaction',
+        description: `Transaction occurred at ${hour}:00 hours - unusual activity time`,
+        color: [107, 114, 128]
+      })
+    }
+    
+    // Check for unusual pattern
+    if (flags.includes('UNUSUAL_PATTERN')) {
+      reasons.push({
+        icon: '!',
+        title: 'Unusual Pattern',
+        description: 'Combination of high amount with new device detected - high risk pattern',
+        color: [220, 38, 38]
+      })
+    }
+    
+    if (reasons.length === 0 && txn.status !== 'SAFE') {
+      // If flagged but no specific rules, add generic reason based on risk score
+      reasons.push({
+        icon: '!',
+        title: 'Elevated Risk Score',
+        description: `Transaction flagged due to cumulative risk factors scoring ${txn.riskScore}/100`,
+        color: [245, 158, 11]
+      })
+    }
+    
+    if (reasons.length === 0) {
+      doc.setFontSize(10)
+      doc.setTextColor(107, 114, 128)
+      doc.setFont('helvetica', 'normal')
+      doc.text('No specific fraud criteria detected - Transaction appears safe', margin + 15, y)
+      y += 10
+    } else {
+      reasons.forEach(reason => {
+        // Icon circle
+        doc.setFillColor(reason.color[0], reason.color[1], reason.color[2])
+        doc.circle(margin + 18, y - 2, 3, 'F')
+        doc.setTextColor(255, 255, 255)
+        doc.setFontSize(6)
+        doc.text(reason.icon, margin + 16.5, y - 0.5)
+        
+        // Title
+        doc.setTextColor(31, 41, 55)
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'bold')
+        doc.text(reason.title + ':', margin + 25, y)
+        
+        // Description
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(75, 85, 99)
+        const descLines = doc.splitTextToSize(reason.description, contentWidth - 50)
+        doc.text(descLines, margin + 25, y + 6)
+        
+        y += 8 + (descLines.length * 5)
+      })
+    }
+    
+    y += 10
+    
+    // === FRAUD SCORE SECTION ===
+    doc.setTextColor(31, 41, 55)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Fraud Score:', margin + 10, y)
+    y += 5
+    
+    // Large score number
+    const scoreColor = txn.riskScore >= 60 ? [220, 38, 38] : 
+                       txn.riskScore >= 30 ? [245, 158, 11] : [34, 197, 94]
+    const severityText = txn.riskScore >= 60 ? '(High)' : 
+                         txn.riskScore >= 30 ? '(Medium)' : '(Low)'
+    
+    doc.setFontSize(36)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(scoreColor[0], scoreColor[1], scoreColor[2])
+    const scoreText = txn.riskScore.toString()
+    doc.text(scoreText, margin + 15, y + 20)
+    
+    // Get the width of the score text while font is still set to 36
+    const scoreTextWidth = doc.getTextWidth(scoreText)
+    
+    // Now set smaller font for severity label and position it after the score
+    doc.setFontSize(14)
+    doc.setTextColor(107, 114, 128)
+    doc.text(severityText, margin + 15 + scoreTextWidth + 5, y + 20)
+    
+    // Description
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    const scoreDesc = txn.riskScore >= 60 
+      ? 'Transaction likely fraudulent, immediate review recommended.'
+      : txn.riskScore >= 30 
+      ? 'Transaction requires further verification.'
+      : 'Transaction appears safe, no action required.'
+    doc.text(scoreDesc, margin + 15, y + 30)
+    
+    // Draw speedometer gauge on the right
+    const gaugeX = pageWidth - margin - 50
+    const gaugeY = y + 15
+    const gaugeRadius = 30
+    
+    // Gauge background arc (gradient effect with segments)
+    const segments = [
+      { start: Math.PI, end: Math.PI + (Math.PI * 0.33), color: [34, 197, 94] },   // Green
+      { start: Math.PI + (Math.PI * 0.33), end: Math.PI + (Math.PI * 0.66), color: [245, 158, 11] }, // Yellow
+      { start: Math.PI + (Math.PI * 0.66), end: Math.PI * 2, color: [220, 38, 38] }  // Red
+    ]
+    
+    doc.setLineWidth(8)
+    segments.forEach(seg => {
+      doc.setDrawColor(seg.color[0], seg.color[1], seg.color[2])
+      // Draw arc using lines
+      const steps = 20
+      for (let i = 0; i < steps; i++) {
+        const angle1 = seg.start + ((seg.end - seg.start) * i / steps)
+        const angle2 = seg.start + ((seg.end - seg.start) * (i + 1) / steps)
+        const x1 = gaugeX + Math.cos(angle1) * gaugeRadius
+        const y1 = gaugeY + Math.sin(angle1) * gaugeRadius
+        const x2 = gaugeX + Math.cos(angle2) * gaugeRadius
+        const y2 = gaugeY + Math.sin(angle2) * gaugeRadius
+        doc.line(x1, y1, x2, y2)
+      }
+    })
+    
+    // Needle
+    const needleAngle = Math.PI + (Math.PI * (txn.riskScore / 100))
+    const needleLength = gaugeRadius - 5
+    doc.setLineWidth(2)
+    doc.setDrawColor(31, 41, 55)
+    doc.line(
+      gaugeX,
+      gaugeY,
+      gaugeX + Math.cos(needleAngle) * needleLength,
+      gaugeY + Math.sin(needleAngle) * needleLength
+    )
+    
+    // Center dot
+    doc.setFillColor(31, 41, 55)
+    doc.circle(gaugeX, gaugeY, 3, 'F')
+    
+    // Score in gauge
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(31, 41, 55)
+    doc.text(txn.riskScore.toString(), gaugeX, gaugeY + 18, { align: 'center' })
+    
+    // Footer line
+    y = pageHeight - margin - 15
+    doc.setDrawColor(229, 231, 235)
+    doc.setLineWidth(0.5)
+    doc.line(margin + 10, y, pageWidth - margin - 10, y)
+    
+    // Footer text
+    doc.setFontSize(8)
+    doc.setTextColor(156, 163, 175)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, margin + 10, y + 8)
+    doc.text('AI-Powered Fraud Detection System', pageWidth - margin - 10, y + 8, { align: 'right' })
+    
+    doc.save(`fraud-report-${txn.txn_id}.pdf`)
   }
 
   const downloadAllReports = () => {
-    const allContent = filteredTransactions
-      .map(txn => generatePDFContent(txn))
-      .join('\n\n' + '='.repeat(80) + '\n\n')
+    // Generate each report as a separate page with the same styling
+    filteredTransactions.forEach((txn, index) => {
+      const doc = new jsPDF()
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      const margin = 15
+      const contentWidth = pageWidth - (margin * 2)
+      
+      // Background
+      doc.setFillColor(243, 244, 246)
+      doc.rect(0, 0, pageWidth, pageHeight, 'F')
+      
+      // White card
+      doc.setFillColor(255, 255, 255)
+      doc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
+      
+      let y = 30
+      
+      // Header with report number
+      doc.setTextColor(107, 114, 128)
+      doc.setFontSize(8)
+      doc.text(`Report ${index + 1} of ${filteredTransactions.length}`, margin + 10, y - 12)
+      
+      // Warning icon
+      doc.setFillColor(251, 191, 36)
+      doc.triangle(25, y - 8, 35, y - 8, 30, y - 16, 'F')
+      
+      // Title
+      doc.setTextColor(31, 41, 55)
+      doc.setFontSize(20)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Fraud Detection Report', 42, y - 8)
+      
+      // Status badge
+      const badgeColor = txn.status === 'FRAUD' ? [220, 38, 38] : 
+                         txn.status === 'SUSPICIOUS' ? [245, 158, 11] : [34, 197, 94]
+      doc.setFontSize(8)
+      doc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
+      doc.text(txn.status, pageWidth - margin - 5, y - 10, { align: 'right' })
+      
+      y += 15
+      doc.setDrawColor(229, 231, 235)
+      doc.line(margin + 10, y, pageWidth - margin - 10, y)
+      y += 12
+      
+      // Quick summary table
+      doc.setFontSize(10)
+      doc.setTextColor(31, 41, 55)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Transaction ID:', margin + 10, y)
+      doc.setFont('helvetica', 'normal')
+      doc.text(txn.txn_id, margin + 50, y)
+      
+      doc.setFont('helvetica', 'bold')
+      doc.text('Amount:', margin + 100, y)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`₹${txn.amount.toLocaleString('en-IN')}`, margin + 125, y)
+      
+      y += 8
+      doc.setFont('helvetica', 'bold')
+      doc.text('Location:', margin + 10, y)
+      doc.setFont('helvetica', 'normal')
+      doc.text(txn.location, margin + 50, y)
+      
+      doc.setFont('helvetica', 'bold')
+      doc.text('Risk Score:', margin + 100, y)
+      doc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
+      doc.setFont('helvetica', 'bold')
+      doc.text(`${txn.riskScore}/100`, margin + 135, y)
+      
+      y += 15
+      doc.setTextColor(31, 41, 55)
+      doc.setFont('helvetica', 'bold')
+      doc.text('AI Analysis:', margin + 10, y)
+      y += 7
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(75, 85, 99)
+      const splitReport = doc.splitTextToSize(txn.report, contentWidth - 20)
+      doc.text(splitReport, margin + 10, y)
+      
+      // Footer
+      doc.setFontSize(8)
+      doc.setTextColor(156, 163, 175)
+      doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, margin + 10, pageHeight - margin - 8)
+      
+      // Save each report separately or combine
+      if (index === 0) {
+        doc.save(`fraud-reports-batch-${new Date().toISOString().split('T')[0]}.pdf`)
+      }
+    })
     
-    const blob = new Blob([allContent], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `all-fraud-reports-${new Date().toISOString().split('T')[0]}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // If there are reports, create a combined PDF
+    if (filteredTransactions.length > 0) {
+      const combinedDoc = new jsPDF()
+      const pageWidth = combinedDoc.internal.pageSize.getWidth()
+      
+      filteredTransactions.forEach((txn, index) => {
+        if (index > 0) combinedDoc.addPage()
+        
+        const pageHeight = combinedDoc.internal.pageSize.getHeight()
+        const margin = 15
+        const contentWidth = pageWidth - (margin * 2)
+        
+        // Background
+        combinedDoc.setFillColor(243, 244, 246)
+        combinedDoc.rect(0, 0, pageWidth, pageHeight, 'F')
+        
+        // White card
+        combinedDoc.setFillColor(255, 255, 255)
+        combinedDoc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
+        
+        let y = 28
+        
+        // Page indicator
+        combinedDoc.setTextColor(107, 114, 128)
+        combinedDoc.setFontSize(8)
+        combinedDoc.text(`Report ${index + 1} of ${filteredTransactions.length}`, pageWidth - margin - 5, y - 10, { align: 'right' })
+        
+        // Title
+        combinedDoc.setTextColor(31, 41, 55)
+        combinedDoc.setFontSize(18)
+        combinedDoc.setFont('helvetica', 'bold')
+        combinedDoc.text('Fraud Detection Report', margin + 10, y)
+        
+        // Status badge
+        const badgeColor = txn.status === 'FRAUD' ? [220, 38, 38] : 
+                           txn.status === 'SUSPICIOUS' ? [245, 158, 11] : [34, 197, 94]
+        combinedDoc.setFontSize(10)
+        combinedDoc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
+        combinedDoc.setFont('helvetica', 'bold')
+        combinedDoc.text(txn.status, margin + 10, y + 8)
+        
+        y += 20
+        
+        // Details grid
+        const details = [
+          ['Transaction ID', txn.txn_id],
+          ['User ID', txn.user_id],
+          ['Amount', `₹${txn.amount.toLocaleString('en-IN')}`],
+          ['Location', txn.location],
+          ['Device', txn.device],
+          ['Risk Score', `${txn.riskScore}/100`],
+        ]
+        
+        combinedDoc.setFontSize(9)
+        details.forEach(([label, value], i) => {
+          const col = i % 2
+          const row = Math.floor(i / 2)
+          const xOffset = col * 90
+          
+          combinedDoc.setTextColor(107, 114, 128)
+          combinedDoc.setFont('helvetica', 'normal')
+          combinedDoc.text(label + ':', margin + 10 + xOffset, y + (row * 10))
+          
+          combinedDoc.setTextColor(31, 41, 55)
+          combinedDoc.setFont('helvetica', 'bold')
+          combinedDoc.text(value, margin + 45 + xOffset, y + (row * 10))
+        })
+        
+        y += 35
+        
+        // AI Analysis
+        combinedDoc.setTextColor(31, 41, 55)
+        combinedDoc.setFontSize(11)
+        combinedDoc.setFont('helvetica', 'bold')
+        combinedDoc.text('Analysis:', margin + 10, y)
+        y += 7
+        
+        combinedDoc.setFont('helvetica', 'normal')
+        combinedDoc.setFontSize(9)
+        combinedDoc.setTextColor(75, 85, 99)
+        const splitReport = combinedDoc.splitTextToSize(txn.report, contentWidth - 20)
+        combinedDoc.text(splitReport, margin + 10, y)
+      })
+      
+      combinedDoc.save(`all-fraud-reports-${new Date().toISOString().split('T')[0]}.pdf`)
+    }
   }
 
   return (
@@ -301,7 +783,16 @@ Fraud Detection System - AI-Powered Transaction Monitoring
             <p className="text-muted-foreground">Generate and download detailed fraud analysis reports</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={fetchTransactions} variant="outline" className="gap-2">
+            {isStreaming && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/30 rounded-full">
+                <div className="relative w-2 h-2">
+                  <div className="absolute inset-0 rounded-full bg-green-500 animate-ping" />
+                  <div className="absolute inset-0 rounded-full bg-green-500" />
+                </div>
+                <span className="text-sm font-medium text-green-500">Live</span>
+              </div>
+            )}
+            <Button onClick={refresh} variant="outline" className="gap-2">
               <RefreshCw className="h-4 w-4" />
               Refresh
             </Button>
