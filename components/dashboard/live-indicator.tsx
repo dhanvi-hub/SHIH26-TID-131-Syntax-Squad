@@ -24,7 +24,7 @@ function getStatusColor(status: string) {
 }
 
 export function LiveIndicator({ transaction, isActive }: LiveIndicatorProps) {
-  if (!isActive || !transaction) {
+  if (!transaction) {
     return (
       <Card className="bg-card border-border">
         <CardContent className="py-4">

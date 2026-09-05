@@ -10,6 +10,7 @@ import {
   Scale,
   Shield,
   Search,
+  Share2,
 } from 'lucide-react'
 
 const navItems = [
@@ -32,6 +33,11 @@ const navItems = [
     name: 'Reports',
     href: '/reports',
     icon: FileText,
+  },
+  {
+    name: 'Consortium',
+    href: '/consortium',
+    icon: Share2,
   },
   {
     name: 'Rules',

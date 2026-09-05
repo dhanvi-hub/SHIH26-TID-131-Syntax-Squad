@@ -1,4 +1,11 @@
-import type { Transaction, DetectiveResult, ResearchResult, RiskResult, TelecomResult } from '@/lib/types'
+import type { 
+  Transaction, 
+  DetectiveResult, 
+  ResearchResult, 
+  EnhancedRiskResult,
+  CrossInstitutionIntelligenceResult,
+  SocialEngineeringResult
+} from '@/lib/types'
 
 const FLAG_DESCRIPTIONS: Record<string, string> = {
   VERY_HIGH_AMOUNT: 'transaction amount is significantly higher than normal limits',
@@ -9,57 +16,68 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   RAPID_LOCATION_CHANGE: 'location changed impossibly fast from previous transaction',
   LOCATION_CHANGE: 'transaction location differs from usual patterns',
   NEW_DEVICE: 'transaction made from an unrecognized device',
+  DEVICE_CHANGE: 'device hardware fingerprint changed from established profile',
   IP_CHANGE: 'IP address changed from previous transaction',
-  ACTIVE_VOICE_CALL_DURING_TX: 'active voice call connected during payment initiation (Vishing alert)',
-  SMS_KYC_PHISHING_ATTEMPT: 'suspicious SMS received threatening KYC/Account suspension',
-  SMS_ELECTRICITY_SCAM: 'suspicious SMS threatening immediate electricity disconnection',
-  SMS_LOTTERY_JOB_SCAM: 'suspicious SMS luring with fake reward or job offer',
-  SMS_SUSPICIOUS_URL_DETECTED: 'unverified URL or APK link detected in recent SMS',
-  VISHING_PLUS_SMS_CORRELATION: 'high-risk correlation between live call and scam SMS',
+  LATE_NIGHT: 'transaction occurred during late night hours',
+  VELOCITY_ANOMALY: 'transaction velocity pattern is abnormal',
+  UNUSUAL_PATTERN: 'unusual transaction pattern detected',
+  KNOWN_SCAM_BENEFICIARY: 'beneficiary matched known scam/mule account in cross-institution intelligence',
+  CROSS_INSTITUTION_DEVICE_MATCH: 'hardware fingerprint flagged for fraudulent activity across participating banks',
+  SOCIAL_ENG_URGENCY: 'transaction initiated shortly after a high-pressure caller interaction',
+  FAKE_KYC_PRESSURE: 'coercive interaction signature matching fake KYC/account closure scam',
 }
 
 export function reportingAgent(
   transaction: Transaction,
   detectiveResult: DetectiveResult,
   researchResult: ResearchResult,
-  riskResult: RiskResult,
-  telecomResult?: TelecomResult
+  riskResult: EnhancedRiskResult,
+  intelligenceResult?: CrossInstitutionIntelligenceResult,
+  socialEngineeringResult?: SocialEngineeringResult
 ): string {
   const parts: string[] = []
 
-  // Opening based on status
-  if (riskResult.status === 'FRAUD') {
-    parts.push(`ALERT: High-risk transaction detected for user ${transaction.user_id}.`)
+  // 1. Opening based on status & escalation
+  if (riskResult.multiSignalEscalation?.enabled) {
+    parts.push(`ESCALATION ALERT: Transaction escalated to ${riskResult.status} (Score: ${riskResult.riskScore}/100).`)
+    parts.push(`Reason: Independent signals indicate elevated risk despite the model's low-risk prediction.`)
+  } else if (riskResult.status === 'FRAUD') {
+    parts.push(`ALERT: High-risk transaction detected for user ${transaction.user_id} (Score: ${riskResult.riskScore}/100).`)
   } else if (riskResult.status === 'SUSPICIOUS') {
-    parts.push(`WARNING: Suspicious activity detected for user ${transaction.user_id}.`)
+    parts.push(`WARNING: Suspicious activity detected for user ${transaction.user_id} (Score: ${riskResult.riskScore}/100).`)
   } else {
-    parts.push(`Transaction for user ${transaction.user_id} appears normal.`)
+    parts.push(`Transaction for user ${transaction.user_id} appears normal (Score: ${riskResult.riskScore}/100).`)
   }
 
-  // Add transaction context
+  // 2. Add transaction context
   parts.push(
     `Transaction of \u20B9${transaction.amount.toLocaleString('en-IN')} from ${transaction.location} via ${transaction.device}.`
   )
 
-  // Explain rule flags
+  // 3. Explain active rule flags
   if (detectiveResult.ruleFlags.length > 0) {
     const flagExplanations = detectiveResult.ruleFlags
       .map((flag) => FLAG_DESCRIPTIONS[flag] || flag.toLowerCase().replace(/_/g, ' '))
       .join('; ')
-    parts.push(`Flagged because: ${flagExplanations}.`)
+    parts.push(`Active rules triggered: ${flagExplanations}.`)
   }
 
-  // Telecom & Mobile Telemetry evidence
-  if (telecomResult && telecomResult.evidenceSummary.length > 0) {
-    parts.push(`Telecom Threat Intel: ${telecomResult.evidenceSummary.join('. ')}.`)
+  // 4. External Intelligence findings
+  if (intelligenceResult?.matched) {
+    parts.push(`Consortium Intelligence: ${intelligenceResult.summary}`)
   }
 
-  // Add research findings
+  // 5. Social Engineering findings
+  if (socialEngineeringResult?.detected) {
+    parts.push(`Scam Context: ${socialEngineeringResult.explanation}`)
+  }
+
+  // 6. Behavioral research findings
   if (researchResult.findings.length > 0) {
     parts.push(`Behavioral analysis: ${researchResult.findings.join('. ')}.`)
   }
 
-  // Add comparison context
+  // 7. Comparison context
   if (researchResult.averageAmount > 0) {
     const ratio = (transaction.amount / researchResult.averageAmount).toFixed(1)
     if (parseFloat(ratio) > 2) {
@@ -69,14 +87,15 @@ export function reportingAgent(
     }
   }
 
-  // Closing recommendation
+  // 8. Closing recommendation
   if (riskResult.status === 'FRAUD') {
-    parts.push('Recommended action: Block transaction and contact user immediately.')
+    parts.push('Recommended action: Block transaction immediately, freeze destination routing, and contact customer.')
   } else if (riskResult.status === 'SUSPICIOUS') {
-    parts.push('Recommended action: Flag for manual review and consider additional verification.')
+    parts.push('Recommended action: Place on hold for step-up multi-factor verification and analyst review.')
   } else {
-    parts.push('No immediate action required.')
+    parts.push('Recommended action: No immediate intervention required.')
   }
 
   return parts.join(' ')
 }
+

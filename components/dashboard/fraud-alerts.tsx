@@ -45,7 +45,7 @@ export function FraudAlerts({ alerts, onDismiss }: FraudAlertsProps) {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate mt-1">
-                  {alert.report.slice(0, 100)}...
+                  {(typeof alert.report === 'string' ? alert.report : String(alert.report?.summary || alert.report || '')).slice(0, 100)}...
                 </p>
               </div>
               <div className="flex items-center gap-1 ml-2">

@@ -1,7 +1,7 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Search, FileSearch, Gauge, FileText, CheckCircle2, Loader2, Circle } from 'lucide-react'
+import { Search, FileSearch, Gauge, FileText, CheckCircle2, Loader2, Circle, Share2, PhoneCall } from 'lucide-react'
 import type { AgentStep } from '@/lib/types'
 
 interface AgentPipelineProps {
@@ -10,6 +10,8 @@ interface AgentPipelineProps {
 }
 
 const STEP_ICONS = {
+  'Intelligence Agent': Share2,
+  'Social Engineering Agent': PhoneCall,
   'Detective Agent': Search,
   'Research Agent': FileSearch,
   'Risk Engine': Gauge,
@@ -17,10 +19,12 @@ const STEP_ICONS = {
 }
 
 const STEP_DESCRIPTIONS = {
-  'Detective Agent': 'Rule-based fraud detection',
-  'Research Agent': 'User behavior analysis',
-  'Risk Engine': 'Risk score calculation',
-  'Reporting Agent': 'Generate explanation',
+  'Intelligence Agent': 'Privacy consortium lookup',
+  'Social Engineering Agent': 'Scam metadata analysis',
+  'Detective Agent': 'Active bank rules',
+  'Research Agent': 'User baseline graph',
+  'Risk Engine': 'Multi-signal fusion',
+  'Reporting Agent': 'Explainable report',
 }
 
 function getStepIcon(step: AgentStep) {
@@ -37,6 +41,8 @@ function getStepIcon(step: AgentStep) {
 
 export function AgentPipeline({ steps, isActive }: AgentPipelineProps) {
   const defaultSteps: AgentStep[] = [
+    { name: 'Intelligence Agent', status: 'pending' },
+    { name: 'Social Engineering Agent', status: 'pending' },
     { name: 'Detective Agent', status: 'pending' },
     { name: 'Research Agent', status: 'pending' },
     { name: 'Risk Engine', status: 'pending' },
@@ -44,6 +50,7 @@ export function AgentPipeline({ steps, isActive }: AgentPipelineProps) {
   ]
 
   const displaySteps = steps.length > 0 ? steps : defaultSteps
+
 
   return (
     <Card className="bg-card border-border">

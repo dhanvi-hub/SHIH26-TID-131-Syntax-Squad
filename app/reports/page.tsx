@@ -17,10 +17,14 @@ import {
   Smartphone,
   Banknote,
   Wifi,
-  TrendingUp
+  TrendingUp,
+  Building2,
+  PhoneCall,
+  ShieldAlert
 } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import type { ProcessedTransaction, FraudCriteria } from '@/lib/types'
+import { renderPDFEntityGraph } from '@/lib/pdf/graph-renderer'
 
 const criteriaIcons = {
   rapidTransactions: TrendingUp,
@@ -30,6 +34,8 @@ const criteriaIcons = {
   highAmount: Banknote,
   suspiciousIP: Wifi,
   unusualPattern: AlertTriangle,
+  crossInstitutionIntelligence: Building2,
+  socialEngineering: PhoneCall,
 }
 
 const criteriaLabels = {
@@ -40,6 +46,8 @@ const criteriaLabels = {
   highAmount: 'High Amount',
   suspiciousIP: 'Suspicious IP/VPN',
   unusualPattern: 'Unusual Pattern',
+  crossInstitutionIntelligence: 'Cross-Bank Consortium Signal',
+  socialEngineering: 'Scam-Call Coercion Signal',
 }
 
 function CriteriaBar({ criteria }: { criteria: FraudCriteria }) {
@@ -56,8 +64,8 @@ function CriteriaBar({ criteria }: { criteria: FraudCriteria }) {
   return (
     <div className="space-y-3">
       {entries.map(([key, value]) => {
-        const Icon = criteriaIcons[key as keyof typeof criteriaIcons]
-        const label = criteriaLabels[key as keyof typeof criteriaLabels]
+        const Icon = criteriaIcons[key as keyof typeof criteriaIcons] || ShieldAlert
+        const label = criteriaLabels[key as keyof typeof criteriaLabels] || key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
         
         return (
           <div key={key} className="space-y-1">
@@ -198,12 +206,19 @@ export default function ReportsPage() {
       highAmount: 0,
       suspiciousIP: 0,
       unusualPattern: 0,
+      crossInstitutionIntelligence: 0,
+      socialEngineering: 0,
     }
 
     const activeCriteria = Object.entries(criteria)
       .filter(([, value]) => value > 0)
-      .map(([key, value]) => `${criteriaLabels[key as keyof typeof criteriaLabels]}: ${value}%`)
+      .map(([key, value]) => {
+        const label = criteriaLabels[key as keyof typeof criteriaLabels] || key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+        return `${label}: ${value}%`
+      })
       .join('\n    ')
+
+    const flags = txn.ruleFlags || []
 
     return `
 ================================================================================
@@ -224,7 +239,7 @@ RISK ASSESSMENT
 ---------------
 Risk Score: ${txn.riskScore}/100
 Status: ${txn.status}
-Rule Flags: ${txn.ruleFlags.join(', ') || 'None'}
+Rule Flags: ${flags.join(', ') || 'None'}
 
 FRAUD CRITERIA BREAKDOWN
 ------------------------
@@ -445,6 +460,26 @@ Fraud Detection System - AI-Powered Transaction Monitoring
         color: [220, 38, 38]
       })
     }
+
+    // Check for cross institution / consortium flags
+    if (flags.includes('CROSS_INSTITUTION_MATCH') || flags.includes('KNOWN_SCAM_BENEFICIARY') || txn.agentResults?.intelligence?.matched) {
+      reasons.push({
+        icon: '!',
+        title: 'Cross-Bank Consortium Threat Match',
+        description: txn.agentResults?.intelligence?.summary || 'Beneficiary or entity matched known scam patterns in inter-bank consortium DB',
+        color: [220, 38, 38]
+      })
+    }
+
+    // Check for social engineering / scam call flags
+    if (flags.includes('SCAM_CALL_COERCION') || flags.includes('ACTIVE_VOICE_CALL_DURING_TX') || flags.includes('VISHING_PLUS_SMS_CORRELATION') || txn.agentResults?.socialEngineering?.detected) {
+      reasons.push({
+        icon: '!',
+        title: 'Scam-Call Coercion / Vishing Threat',
+        description: txn.agentResults?.socialEngineering?.explanation || 'Active phone call or vishing coercion pattern detected during transaction',
+        color: [220, 38, 38]
+      })
+    }
     
     if (reasons.length === 0 && txn.status !== 'SAFE') {
       // If flagged but no specific rules, add generic reason based on risk score
@@ -589,187 +624,101 @@ Fraud Detection System - AI-Powered Transaction Monitoring
     doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, margin + 10, y + 8)
     doc.text('AI-Powered Fraud Detection System', pageWidth - margin - 10, y + 8, { align: 'right' })
     
+    // Render static vector Entity Relationship & Consortium Graph on Page 2
+    renderPDFEntityGraph(doc, txn)
+
     doc.save(`fraud-report-${txn.txn_id}.pdf`)
   }
 
   const downloadAllReports = () => {
-    // Generate each report as a separate page with the same styling
+    if (filteredTransactions.length === 0) return
+
+    const combinedDoc = new jsPDF()
+    const pageWidth = combinedDoc.internal.pageSize.getWidth()
+
     filteredTransactions.forEach((txn, index) => {
-      const doc = new jsPDF()
-      const pageWidth = doc.internal.pageSize.getWidth()
-      const pageHeight = doc.internal.pageSize.getHeight()
+      if (index > 0) combinedDoc.addPage()
+      
+      const pageHeight = combinedDoc.internal.pageSize.getHeight()
       const margin = 15
       const contentWidth = pageWidth - (margin * 2)
       
       // Background
-      doc.setFillColor(243, 244, 246)
-      doc.rect(0, 0, pageWidth, pageHeight, 'F')
+      combinedDoc.setFillColor(243, 244, 246)
+      combinedDoc.rect(0, 0, pageWidth, pageHeight, 'F')
       
       // White card
-      doc.setFillColor(255, 255, 255)
-      doc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
+      combinedDoc.setFillColor(255, 255, 255)
+      combinedDoc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
       
-      let y = 30
+      let y = 28
       
-      // Header with report number
-      doc.setTextColor(107, 114, 128)
-      doc.setFontSize(8)
-      doc.text(`Report ${index + 1} of ${filteredTransactions.length}`, margin + 10, y - 12)
-      
-      // Warning icon
-      doc.setFillColor(251, 191, 36)
-      doc.triangle(25, y - 8, 35, y - 8, 30, y - 16, 'F')
+      // Page indicator
+      combinedDoc.setTextColor(107, 114, 128)
+      combinedDoc.setFontSize(8)
+      combinedDoc.text(`Report ${index + 1} of ${filteredTransactions.length}`, pageWidth - margin - 5, y - 10, { align: 'right' })
       
       // Title
-      doc.setTextColor(31, 41, 55)
-      doc.setFontSize(20)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Fraud Detection Report', 42, y - 8)
+      combinedDoc.setTextColor(31, 41, 55)
+      combinedDoc.setFontSize(18)
+      combinedDoc.setFont('helvetica', 'bold')
+      combinedDoc.text('Fraud Detection Report', margin + 10, y)
       
       // Status badge
       const badgeColor = txn.status === 'FRAUD' ? [220, 38, 38] : 
                          txn.status === 'SUSPICIOUS' ? [245, 158, 11] : [34, 197, 94]
-      doc.setFontSize(8)
-      doc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
-      doc.text(txn.status, pageWidth - margin - 5, y - 10, { align: 'right' })
+      combinedDoc.setFontSize(10)
+      combinedDoc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
+      combinedDoc.setFont('helvetica', 'bold')
+      combinedDoc.text(txn.status, margin + 10, y + 8)
       
-      y += 15
-      doc.setDrawColor(229, 231, 235)
-      doc.line(margin + 10, y, pageWidth - margin - 10, y)
-      y += 12
+      y += 20
       
-      // Quick summary table
-      doc.setFontSize(10)
-      doc.setTextColor(31, 41, 55)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Transaction ID:', margin + 10, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(txn.txn_id, margin + 50, y)
+      // Details grid
+      const details = [
+        ['Transaction ID', txn.txn_id],
+        ['User ID', txn.user_id],
+        ['Amount', `Rs. ${txn.amount.toLocaleString('en-IN')}`],
+        ['Location', txn.location],
+        ['Device', txn.device],
+        ['Risk Score', `${txn.riskScore}/100`],
+      ]
       
-      doc.setFont('helvetica', 'bold')
-      doc.text('Amount:', margin + 100, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`₹${txn.amount.toLocaleString('en-IN')}`, margin + 125, y)
-      
-      y += 8
-      doc.setFont('helvetica', 'bold')
-      doc.text('Location:', margin + 10, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(txn.location, margin + 50, y)
-      
-      doc.setFont('helvetica', 'bold')
-      doc.text('Risk Score:', margin + 100, y)
-      doc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
-      doc.setFont('helvetica', 'bold')
-      doc.text(`${txn.riskScore}/100`, margin + 135, y)
-      
-      y += 15
-      doc.setTextColor(31, 41, 55)
-      doc.setFont('helvetica', 'bold')
-      doc.text('AI Analysis:', margin + 10, y)
-      y += 7
-      doc.setFont('helvetica', 'normal')
-      doc.setTextColor(75, 85, 99)
-      const splitReport = doc.splitTextToSize(txn.report, contentWidth - 20)
-      doc.text(splitReport, margin + 10, y)
-      
-      // Footer
-      doc.setFontSize(8)
-      doc.setTextColor(156, 163, 175)
-      doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, margin + 10, pageHeight - margin - 8)
-      
-      // Save each report separately or combine
-      if (index === 0) {
-        doc.save(`fraud-reports-batch-${new Date().toISOString().split('T')[0]}.pdf`)
-      }
-    })
-    
-    // If there are reports, create a combined PDF
-    if (filteredTransactions.length > 0) {
-      const combinedDoc = new jsPDF()
-      const pageWidth = combinedDoc.internal.pageSize.getWidth()
-      
-      filteredTransactions.forEach((txn, index) => {
-        if (index > 0) combinedDoc.addPage()
+      combinedDoc.setFontSize(9)
+      details.forEach(([label, value], i) => {
+        const col = i % 2
+        const row = Math.floor(i / 2)
+        const xOffset = col * 90
         
-        const pageHeight = combinedDoc.internal.pageSize.getHeight()
-        const margin = 15
-        const contentWidth = pageWidth - (margin * 2)
-        
-        // Background
-        combinedDoc.setFillColor(243, 244, 246)
-        combinedDoc.rect(0, 0, pageWidth, pageHeight, 'F')
-        
-        // White card
-        combinedDoc.setFillColor(255, 255, 255)
-        combinedDoc.roundedRect(margin, margin, contentWidth, pageHeight - (margin * 2), 3, 3, 'F')
-        
-        let y = 28
-        
-        // Page indicator
         combinedDoc.setTextColor(107, 114, 128)
-        combinedDoc.setFontSize(8)
-        combinedDoc.text(`Report ${index + 1} of ${filteredTransactions.length}`, pageWidth - margin - 5, y - 10, { align: 'right' })
-        
-        // Title
-        combinedDoc.setTextColor(31, 41, 55)
-        combinedDoc.setFontSize(18)
-        combinedDoc.setFont('helvetica', 'bold')
-        combinedDoc.text('Fraud Detection Report', margin + 10, y)
-        
-        // Status badge
-        const badgeColor = txn.status === 'FRAUD' ? [220, 38, 38] : 
-                           txn.status === 'SUSPICIOUS' ? [245, 158, 11] : [34, 197, 94]
-        combinedDoc.setFontSize(10)
-        combinedDoc.setTextColor(badgeColor[0], badgeColor[1], badgeColor[2])
-        combinedDoc.setFont('helvetica', 'bold')
-        combinedDoc.text(txn.status, margin + 10, y + 8)
-        
-        y += 20
-        
-        // Details grid
-        const details = [
-          ['Transaction ID', txn.txn_id],
-          ['User ID', txn.user_id],
-          ['Amount', `₹${txn.amount.toLocaleString('en-IN')}`],
-          ['Location', txn.location],
-          ['Device', txn.device],
-          ['Risk Score', `${txn.riskScore}/100`],
-        ]
-        
-        combinedDoc.setFontSize(9)
-        details.forEach(([label, value], i) => {
-          const col = i % 2
-          const row = Math.floor(i / 2)
-          const xOffset = col * 90
-          
-          combinedDoc.setTextColor(107, 114, 128)
-          combinedDoc.setFont('helvetica', 'normal')
-          combinedDoc.text(label + ':', margin + 10 + xOffset, y + (row * 10))
-          
-          combinedDoc.setTextColor(31, 41, 55)
-          combinedDoc.setFont('helvetica', 'bold')
-          combinedDoc.text(value, margin + 45 + xOffset, y + (row * 10))
-        })
-        
-        y += 35
-        
-        // AI Analysis
-        combinedDoc.setTextColor(31, 41, 55)
-        combinedDoc.setFontSize(11)
-        combinedDoc.setFont('helvetica', 'bold')
-        combinedDoc.text('Analysis:', margin + 10, y)
-        y += 7
-        
         combinedDoc.setFont('helvetica', 'normal')
-        combinedDoc.setFontSize(9)
-        combinedDoc.setTextColor(75, 85, 99)
-        const splitReport = combinedDoc.splitTextToSize(txn.report, contentWidth - 20)
-        combinedDoc.text(splitReport, margin + 10, y)
+        combinedDoc.text(label + ':', margin + 10 + xOffset, y + (row * 10))
+        
+        combinedDoc.setTextColor(31, 41, 55)
+        combinedDoc.setFont('helvetica', 'bold')
+        combinedDoc.text(value, margin + 45 + xOffset, y + (row * 10))
       })
       
-      combinedDoc.save(`all-fraud-reports-${new Date().toISOString().split('T')[0]}.pdf`)
-    }
+      y += 35
+      
+      // AI Analysis
+      combinedDoc.setTextColor(31, 41, 55)
+      combinedDoc.setFontSize(11)
+      combinedDoc.setFont('helvetica', 'bold')
+      combinedDoc.text('Analysis:', margin + 10, y)
+      y += 7
+      
+      combinedDoc.setFont('helvetica', 'normal')
+      combinedDoc.setFontSize(9)
+      combinedDoc.setTextColor(75, 85, 99)
+      const splitReport = combinedDoc.splitTextToSize(txn.report || 'No analysis available', contentWidth - 20)
+      combinedDoc.text(splitReport, margin + 10, y)
+
+      // Render static vector Entity Relationship & Consortium Graph for each report
+      renderPDFEntityGraph(combinedDoc, txn)
+    })
+    
+    combinedDoc.save(`all-fraud-reports-${new Date().toISOString().split('T')[0]}.pdf`)
   }
 
   return (

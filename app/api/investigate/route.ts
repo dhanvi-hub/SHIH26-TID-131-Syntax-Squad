@@ -54,6 +54,10 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
     SUSPICIOUS_IP: 20,
     IP_CHANGE: 5,
     UNUSUAL_PATTERN: 20,
+    KNOWN_SCAM_BENEFICIARY: 30,
+    CROSS_INSTITUTION_DEVICE_MATCH: 25,
+    SOCIAL_ENG_URGENCY: 25,
+    FAKE_KYC_PRESSURE: 30,
   }
 
   // Calculate raw scores
@@ -64,6 +68,8 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
   let highAmount = 0
   let suspiciousIP = 0
   let unusualPattern = 0
+  let crossInstitutionIntelligence = 0
+  let socialEngineering = 0
 
   ruleFlags.forEach(flag => {
     const weight = criteriaWeights[flag] || 5
@@ -77,7 +83,7 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
     if (flag === 'LATE_NIGHT') {
       lateNightTransaction += weight
     }
-    if (['NEW_DEVICE', 'DEVICE_CHANGE'].includes(flag)) {
+    if (['NEW_DEVICE', 'DEVICE_CHANGE', 'CROSS_INSTITUTION_DEVICE_MATCH'].includes(flag)) {
       differentDevice += weight
     }
     if (['VERY_HIGH_AMOUNT', 'HIGH_AMOUNT'].includes(flag)) {
@@ -89,11 +95,18 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
     if (flag === 'UNUSUAL_PATTERN') {
       unusualPattern += weight
     }
+    if (['KNOWN_SCAM_BENEFICIARY', 'CROSS_INSTITUTION_DEVICE_MATCH'].includes(flag)) {
+      crossInstitutionIntelligence += weight
+    }
+    if (['SOCIAL_ENG_URGENCY', 'FAKE_KYC_PRESSURE'].includes(flag)) {
+      socialEngineering += weight
+    }
   })
 
   // Calculate total and normalize to percentages
   const total = rapidTransactions + differentLocation + lateNightTransaction + 
-                differentDevice + highAmount + suspiciousIP + unusualPattern
+                differentDevice + highAmount + suspiciousIP + unusualPattern +
+                crossInstitutionIntelligence + socialEngineering
 
   if (total === 0) {
     return {
@@ -104,6 +117,8 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
       highAmount: 0,
       suspiciousIP: 0,
       unusualPattern: 0,
+      crossInstitutionIntelligence: 0,
+      socialEngineering: 0,
     }
   }
 
@@ -115,5 +130,8 @@ function calculateFraudCriteria(ruleFlags: string[], totalRiskScore: number): Re
     highAmount: Math.round((highAmount / total) * 100),
     suspiciousIP: Math.round((suspiciousIP / total) * 100),
     unusualPattern: Math.round((unusualPattern / total) * 100),
+    crossInstitutionIntelligence: Math.round((crossInstitutionIntelligence / total) * 100),
+    socialEngineering: Math.round((socialEngineering / total) * 100),
   }
 }
+

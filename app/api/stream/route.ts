@@ -1,23 +1,30 @@
-import { generateTransaction } from '@/lib/agents/transaction-generator'
-import { processTransaction } from '@/lib/agents/pipeline'
 import { transactionStore } from '@/lib/store'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
+export async function OPTIONS() {
+  return new Response(null, { headers: corsHeaders })
+}
+
 export async function GET(request: Request) {
   const encoder = new TextEncoder()
   let isActive = true
   let controllerClosed = false
-  
-  // Listen for client disconnect
+
   request.signal.addEventListener('abort', () => {
     isActive = false
+    controllerClosed = true
   })
-  
+
   const stream = new ReadableStream({
     async start(controller) {
-      // Safe enqueue function that checks if controller is still open
       const safeEnqueue = (data: string) => {
         if (controllerClosed || !isActive) return false
         try {
@@ -28,8 +35,7 @@ export async function GET(request: Request) {
           return false
         }
       }
-      
-      // Safe close function
+
       const safeClose = () => {
         if (controllerClosed) return
         controllerClosed = true
@@ -39,63 +45,37 @@ export async function GET(request: Request) {
           // Controller might already be closed
         }
       }
-      
-      // Send initial stats
+
+      // 1. Send initial stats on connection
       const stats = transactionStore.getStats()
-      if (!safeEnqueue(`data: ${JSON.stringify({ type: 'stats', data: stats })}\n\n`)) {
-        return
-      }
-      
-      // Function to send transaction updates
-      const sendTransaction = async () => {
-        if (!isActive || controllerClosed) return false
-        
-        try {
-          const transaction = generateTransaction()
-          const result = await processTransaction(transaction)
-          
-          if (!isActive || controllerClosed) return false
-          
-          // Send the processed transaction
-          if (!safeEnqueue(
-            `data: ${JSON.stringify({ 
-              type: 'transaction', 
-              data: result.transaction,
-              steps: result.steps 
-            })}\n\n`
-          )) {
-            return false
-          }
-          
-          // Send updated stats
-          const updatedStats = transactionStore.getStats()
-          if (!safeEnqueue(`data: ${JSON.stringify({ type: 'stats', data: updatedStats })}\n\n`)) {
-            return false
-          }
-          
-          return true
-        } catch (error) {
-          if (isActive && !controllerClosed) {
-            console.error('[v0] Error generating transaction:', error)
-          }
-          return false
+      safeEnqueue(`data: ${JSON.stringify({ type: 'stats', data: stats })}\n\n`)
+
+      // 2. Subscribe to transactionStore events (captures Expo Go app, simulation & seed)
+      const unsubscribe = transactionStore.subscribe((txn) => {
+        if (!isActive || controllerClosed) return
+        safeEnqueue(`data: ${JSON.stringify({ type: 'transaction', data: txn })}\n\n`)
+        const updatedStats = transactionStore.getStats()
+        safeEnqueue(`data: ${JSON.stringify({ type: 'stats', data: updatedStats })}\n\n`)
+      })
+
+      // 3. Heartbeat interval every 3s to keep SSE connection alive and prevent browser timeouts
+      const heartbeatInterval = setInterval(() => {
+        if (!isActive || controllerClosed) {
+          clearInterval(heartbeatInterval)
+          unsubscribe()
+          safeClose()
+          return
         }
-      }
-      
-      // Generate transactions at random intervals (1-3 seconds)
-      const generateAtInterval = async () => {
-        while (isActive && !controllerClosed) {
-          const success = await sendTransaction()
-          if (!success || !isActive || controllerClosed) break
-          
-          const delay = Math.floor(Math.random() * 2000) + 1000 // 1-3 seconds
-          await new Promise((resolve) => setTimeout(resolve, delay))
-        }
-        
+        safeEnqueue(`: heartbeat\n\n`)
+      }, 3000)
+
+      request.signal.addEventListener('abort', () => {
+        isActive = false
+        controllerClosed = true
+        if (heartbeatInterval) clearInterval(heartbeatInterval)
+        unsubscribe()
         safeClose()
-      }
-      
-      generateAtInterval()
+      })
     },
     cancel() {
       isActive = false
@@ -105,9 +85,11 @@ export async function GET(request: Request) {
 
   return new Response(stream, {
     headers: {
+      ...corsHeaders,
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
   })
 }
